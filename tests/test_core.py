@@ -55,6 +55,27 @@ def test_load_historical_data_invalid_types(temp_csv_files: dict[str, Path]) -> 
     assert "invalid data types" in str(exc_info.value).lower()
 
 
+def test_load_historical_data_corrupt_file(tmp_path: Path) -> None:
+    """Verifies that a completely corrupt or unreadable file raises DataLoaderError."""
+    corrupt_file = tmp_path / "corrupt.csv"
+    corrupt_file.write_bytes(b"\x00\xff\x00\xff\r\n\xff\xff")
+    with pytest.raises(DataLoaderError):
+        load_historical_data(corrupt_file)
+
+
+def test_load_historical_data_invalid_date_type(tmp_path: Path) -> None:
+    """Verifies that if date is non-string (e.g. numeric), it raises DataLoaderError."""
+    invalid_file = tmp_path / "invalid_date.csv"
+    # Write date as numeric float which will be parsed as float, not string
+    invalid_file.write_text(
+        "date,sp500_tr_return,cpi_index,treasury_10yr_yield\n"
+        "1928,0.012,-0.001,0.035\n"
+    )
+    with pytest.raises(DataLoaderError) as exc_info:
+        load_historical_data(invalid_file)
+    assert "must be string" in str(exc_info.value).lower()
+
+
 def test_simulation_zero_withdrawals() -> None:
     """Validate that success rates are exactly 100% if withdrawals are $0."""
     config = SimulationConfig(
@@ -167,3 +188,76 @@ def test_simulation_historical_bootstrap() -> None:
     with pytest.raises(ValueError) as exc_info:
         run_simulation(config, historical_df=None)
     assert "historical data" in str(exc_info.value).lower()
+
+
+def test_simulation_invalid_duration() -> None:
+    """Verifies that simulation duration out of bounds raises ValueError."""
+    config_low = SimulationConfig(
+        starting_principal=100000.0,
+        bridge_duration_months=12,
+        bridge_monthly_withdrawal=1000.0,
+        post_bridge_monthly_withdrawal=500.0,
+        simulation_duration_months=12,  # Too low
+        simulation_mode="stochastic",
+        mean_return_annual=0.07,
+        volatility_annual=0.15,
+        inflation_annual=0.03
+    )
+    with pytest.raises(ValueError) as exc_info:
+        run_simulation(config_low)
+    assert "duration must be between" in str(exc_info.value).lower()
+
+    config_high = SimulationConfig(
+        starting_principal=100000.0,
+        bridge_duration_months=12,
+        bridge_monthly_withdrawal=1000.0,
+        post_bridge_monthly_withdrawal=500.0,
+        simulation_duration_months=400,  # Too high
+        simulation_mode="stochastic",
+        mean_return_annual=0.07,
+        volatility_annual=0.15,
+        inflation_annual=0.03
+    )
+    with pytest.raises(ValueError) as exc_info:
+        run_simulation(config_high)
+    assert "duration must be between" in str(exc_info.value).lower()
+
+
+def test_simulation_invalid_mode() -> None:
+    """Verifies that an unknown simulation mode raises ValueError."""
+    config = SimulationConfig(
+        starting_principal=100000.0,
+        bridge_duration_months=12,
+        bridge_monthly_withdrawal=1000.0,
+        post_bridge_monthly_withdrawal=500.0,
+        simulation_duration_months=120,
+        simulation_mode="invalid_mode_here",  # type: ignore
+        mean_return_annual=0.07,
+        volatility_annual=0.15,
+        inflation_annual=0.03
+    )
+    with pytest.raises(ValueError) as exc_info:
+        run_simulation(config)
+    assert "unknown simulation mode" in str(exc_info.value).lower()
+
+
+def test_simulation_bootstrap_missing_cols() -> None:
+    """Verifies that bootstrap mode raises ValueError if historical columns are missing."""
+    mock_bad_cols = pl.DataFrame({
+        "date": ["2000-01-01"],
+        "some_random_column": [1.0]
+    })
+    config = SimulationConfig(
+        starting_principal=100000.0,
+        bridge_duration_months=12,
+        bridge_monthly_withdrawal=1000.0,
+        post_bridge_monthly_withdrawal=500.0,
+        simulation_duration_months=120,
+        simulation_mode="historical_bootstrap",
+        mean_return_annual=0.0,
+        volatility_annual=0.0,
+        inflation_annual=0.0
+    )
+    with pytest.raises(ValueError) as exc_info:
+        run_simulation(config, historical_df=mock_bad_cols)
+    assert "missing required columns" in str(exc_info.value).lower()
