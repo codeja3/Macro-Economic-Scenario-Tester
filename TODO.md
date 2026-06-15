@@ -10,7 +10,7 @@ This document lists the step-by-step implementation tasks mapped to the developm
 - [x] **Task 1.3**: Implement `mest/core/data_loader.py` to pass tests.
 - [x] **Task 1.4**: Write failing unit tests in `tests/test_core.py` for the Monte Carlo simulation core (verifying path generation, success probability logic, and edge cases like zero withdrawals or total depletion).
 - [x] **Task 1.5**: Implement vectorized Polars simulation core in `mest/core/simulator.py`.
-- [ ] **Task 1.6**: Audit test coverage on `core` engine to verify $\ge 95\%$ coverage and measure simulation runtime to ensure sub-2-second performance.
+- [x] **Task 1.6**: Audit test coverage on `core` engine to verify $\ge 95\%$ coverage and measure simulation runtime to ensure sub-2-second performance.
 
 ## Phase 2: Orchestration Layer & LLM Integration (TDD)
 - [ ] **Task 2.1**: Write failing unit tests in `tests/test_llm.py` for the deterministic scenario classifier.
