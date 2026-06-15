@@ -19,7 +19,7 @@ This document lists the step-by-step implementation tasks mapped to the developm
 
 ## Phase 3: Streamlit Interface & Visualizations
 - [x] **Task 3.1**: Create Streamlit layout in `mest/ui/dashboard.py` (including sidebar parameters and tooltips).
-- [ ] **Task 3.2**: Hook up the Polars simulation core to Streamlit with caching.
+- [x] **Task 3.2**: Hook up the Polars simulation core to Streamlit with caching.
 - [ ] **Task 3.3**: Integrate the Ollama orchestration layer into the UI with asynchronous streaming of CoT, Self-Reflection, and final output.
 
 ## Phase 4: Integration, Verification & Optimization
