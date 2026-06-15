@@ -1,8 +1,11 @@
 """Unit tests for the orchestration and LLM layer of MEST."""
 
+import json
+from unittest.mock import patch, MagicMock
 import pytest
 
 from mest.llm.classifier import classify_scenario
+from mest.llm.orchestrator import generate_analysis_stream
 
 
 def test_classify_scenario_stagflation() -> None:
@@ -51,3 +54,102 @@ def test_classify_scenario_order_priority() -> None:
     # Case B: return < 0.04 and inflation > 0.04 AND return < 0.0.
     # Stagflation takes priority over return downturn, returning Stagflation.
     assert classify_scenario(mean_return=-0.01, volatility=0.15, inflation=0.05) == "Stagflation"
+
+
+def test_generate_analysis_stream_short_query() -> None:
+    """Verifies that a short query (< 50 tokens) goes straight to CoT/SR generation."""
+    # We mock requests.post to return a stream of chunks containing thought, reflection, and response
+    mock_chunks = [
+        "<thought>", "Analyzing ", "parameters.", "</thought>",
+        "<reflection>", "No issues.", "</reflection>",
+        "<response>", "Strategy is safe.", "</response>"
+    ]
+    
+    mock_resp = MagicMock()
+    # iter_lines returns a list of byte strings
+    lines = [json.dumps({"response": c, "done": False}).encode("utf-8") for c in mock_chunks]
+    lines.append(json.dumps({"response": "", "done": True}).encode("utf-8"))
+    mock_resp.iter_lines.return_value = lines
+    mock_resp.__enter__.return_value = mock_resp
+    
+    stats = {"success_probability": 0.95}
+    
+    with patch("requests.post", return_value=mock_resp) as mock_post:
+        generator = generate_analysis_stream(prompt="Is 8% withdrawal safe?", stats=stats)
+        results = list(generator)
+        
+        # Verify it called requests.post once
+        mock_post.assert_called_once()
+        
+        # Verify the chunks are parsed into structured items
+        thought_content = "".join([r["content"] for r in results if r["type"] == "thought"])
+        reflection_content = "".join([r["content"] for r in results if r["type"] == "reflection"])
+        response_content = "".join([r["content"] for r in results if r["type"] == "response"])
+        
+        assert "Analyzing parameters" in thought_content
+        assert "No issues" in reflection_content
+        assert "Strategy is safe" in response_content
+
+
+def test_generate_analysis_stream_long_query() -> None:
+    """Verifies that a long query (> 50 tokens) is first decomposed into sub-questions."""
+    # A query with > 50 words
+    long_query = " ".join(["word"] * 55) + "?"
+    
+    # Side effect: first call returns decomposition, next two return stream
+    def post_side_effect(url, json, **kwargs):
+        # Check if this is a decomposition request (stream is False)
+        if json.get("stream") is False:
+            r = MagicMock()
+            r.json.return_value = {
+                "response": "1. Sub-question 1?\n2. Sub-question 2?"
+            }
+            return r
+        else:
+            # streaming response
+            r = MagicMock()
+            r.iter_lines.return_value = [
+                json.dumps({"response": c, "done": False}).encode("utf-8")
+                for c in ["<thought>", "think", "</thought>", "<response>", "ans", "</response>"]
+            ]
+            r.__enter__.return_value = r
+            return r
+
+    stats = {"success_probability": 0.8}
+    
+    with patch("requests.post", side_effect=post_side_effect) as mock_post:
+        generator = generate_analysis_stream(prompt=long_query, stats=stats)
+        results = list(generator)
+        
+        # Verify it called requests.post multiple times (1 for decomp, 2 for sub-questions)
+        assert mock_post.call_count == 3
+        
+        # Verify that sub-question markers were yielded
+        sub_questions = [r["content"] for r in results if r["type"] == "sub_question"]
+        assert len(sub_questions) == 2
+        assert "Sub-question 1?" in sub_questions[0]
+        assert "Sub-question 2?" in sub_questions[1]
+
+
+def test_generate_analysis_stream_fallback() -> None:
+    """Verifies that if the LLM output does not contain xml tags, it defaults to response."""
+    mock_chunks = ["Direct ", "answer ", "without ", "tags."]
+    mock_resp = MagicMock()
+    lines = [json.dumps({"response": c, "done": False}).encode("utf-8") for c in mock_chunks]
+    lines.append(json.dumps({"response": "", "done": True}).encode("utf-8"))
+    mock_resp.iter_lines.return_value = lines
+    mock_resp.__enter__.return_value = mock_resp
+    
+    stats = {"success_probability": 0.9}
+    
+    with patch("requests.post", return_value=mock_resp):
+        generator = generate_analysis_stream(prompt="Simple question", stats=stats)
+        results = list(generator)
+        
+        # All output should be of type 'response'
+        response_content = "".join([r["content"] for r in results if r["type"] == "response"])
+        assert response_content == "Direct answer without tags."
+        
+        # No thoughts or reflections
+        assert not any(r["type"] == "thought" for r in results)
+        assert not any(r["type"] == "reflection" for r in results)
