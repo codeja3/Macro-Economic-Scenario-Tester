@@ -7,6 +7,7 @@ Ollama LLM orchestration.
 """
 
 from pathlib import Path
+from typing import Any
 import altair as alt
 import pandas as pd
 import polars as pl
@@ -432,7 +433,7 @@ with tab1:
                 legend=alt.Legend(title="Path Status"),
             ),
         )
-        .properties(width="100%", height=450)
+        .properties(height=450)
         .interactive()
     )
     
