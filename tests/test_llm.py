@@ -3,9 +3,10 @@
 import json
 from unittest.mock import patch, MagicMock
 import pytest
+import requests
 
 from mest.llm.classifier import classify_scenario
-from mest.llm.orchestrator import generate_analysis_stream
+from mest.llm.orchestrator import generate_analysis_stream, decompose_query
 
 
 def test_classify_scenario_stagflation() -> None:
@@ -58,16 +59,19 @@ def test_classify_scenario_order_priority() -> None:
 
 def test_generate_analysis_stream_short_query() -> None:
     """Verifies that a short query (< 50 tokens) goes straight to CoT/SR generation."""
-    # We mock requests.post to return a stream of chunks containing thought, reflection, and response
+    # We mock requests.post to return a stream of chunks containing thought, reflection, and response.
+    # We include prefix text before tags to test the yield of preceding buffer content.
     mock_chunks = [
-        "<thought>", "Analyzing ", "parameters.", "</thought>",
-        "<reflection>", "No issues.", "</reflection>",
-        "<response>", "Strategy is safe.", "</response>"
+        "Prefix text ", "<thought>", "Analyzing ", "parameters.", "</thought>",
+        " Intermediate text ", "<reflection>", "No issues.", "</reflection>",
+        " Extra text ", "<response>", "Strategy is safe.", "</response>"
     ]
     
     mock_resp = MagicMock()
     # iter_lines returns a list of byte strings
     lines = [json.dumps({"response": c, "done": False}).encode("utf-8") for c in mock_chunks]
+    # Include an invalid json line to verify it is caught/ignored by raw_token_generator
+    lines.insert(3, b"invalid json line string\n")
     lines.append(json.dumps({"response": "", "done": True}).encode("utf-8"))
     mock_resp.iter_lines.return_value = lines
     mock_resp.__enter__.return_value = mock_resp
@@ -88,6 +92,10 @@ def test_generate_analysis_stream_short_query() -> None:
         
         assert "Analyzing parameters" in thought_content
         assert "No issues" in reflection_content
+        # Response should contain the prefix text, intermediate text, extra text, and the response block
+        assert "Prefix text" in response_content
+        assert "Intermediate text" in response_content
+        assert "Extra text" in response_content
         assert "Strategy is safe" in response_content
 
 
@@ -101,8 +109,9 @@ def test_generate_analysis_stream_long_query() -> None:
         # Check if this is a decomposition request (stream is False)
         if json.get("stream") is False:
             r = MagicMock()
+            # We return a list containing an empty line, a digit dot list item, and a bullet list item
             r.json.return_value = {
-                "response": "1. Sub-question 1?\n2. Sub-question 2?"
+                "response": "\n1. Sub-question 1?\n\n* Sub-question 2?\n"
             }
             return r
         else:
@@ -153,3 +162,35 @@ def test_generate_analysis_stream_fallback() -> None:
         # No thoughts or reflections
         assert not any(r["type"] == "thought" for r in results)
         assert not any(r["type"] == "reflection" for r in results)
+
+
+def test_generate_analysis_stream_connection_error() -> None:
+    """Verifies that if connection to Ollama fails, it yields a graceful error response."""
+    stats = {"success_probability": 0.85}
+    with patch("requests.post", side_effect=requests.exceptions.ConnectionError("Connection refused")):
+        generator = generate_analysis_stream(prompt="Is my plan OK?", stats=stats)
+        results = list(generator)
+        
+        # Verify we got a response chunk with the error message
+        response_content = "".join([r["content"] for r in results if r["type"] == "response"])
+        assert "Failed to connect" in response_content
+
+
+def test_decompose_query_failure() -> None:
+    """Verifies that if decomposition fails, it falls back to the original query."""
+    with patch("requests.post", side_effect=Exception("Ollama down")):
+        questions = decompose_query("Some very long prompt that exceeds fifty words " * 10)
+        assert len(questions) == 1
+        assert "Some very long prompt" in questions[0]
+
+
+def test_decompose_query_no_numbered_list() -> None:
+    """Verifies that if decomposition returns plain text instead of a list, it falls back."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"response": "Just some plain text paragraph describing questions."}
+    
+    with patch("requests.post", return_value=mock_resp):
+        questions = decompose_query("Some very long prompt that exceeds fifty words " * 10)
+        # Should fallback to the original prompt
+        assert len(questions) == 1
+        assert "Some very long prompt" in questions[0]
