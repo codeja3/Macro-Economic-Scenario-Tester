@@ -23,6 +23,6 @@ This document lists the step-by-step implementation tasks mapped to the developm
 - [x] **Task 3.3**: Integrate the Ollama orchestration layer into the UI with asynchronous streaming of CoT, Self-Reflection, and final output.
 
 ## Phase 4: Integration, Verification & Optimization
-- [ ] **Task 4.1**: Execute integration tests and perform manual UI verification.
+- [x] **Task 4.1**: Execute integration tests and perform manual UI verification.
 - [ ] **Task 4.2**: Verify that Ollama calls are fully blocked/mocked in tests.
 - [ ] **Task 4.3**: Perform final documentation updates in [MEMORY.md].

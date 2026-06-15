@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from mest!"
+"""MEST: Macro-Economic Scenario Tester."""
