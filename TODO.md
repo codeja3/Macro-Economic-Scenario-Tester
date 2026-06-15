@@ -24,5 +24,5 @@ This document lists the step-by-step implementation tasks mapped to the developm
 
 ## Phase 4: Integration, Verification & Optimization
 - [x] **Task 4.1**: Execute integration tests and perform manual UI verification.
-- [ ] **Task 4.2**: Verify that Ollama calls are fully blocked/mocked in tests.
+- [x] **Task 4.2**: Verify that Ollama calls are fully blocked/mocked in tests.
 - [ ] **Task 4.3**: Perform final documentation updates in [MEMORY.md].
