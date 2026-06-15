@@ -13,7 +13,7 @@ This document lists the step-by-step implementation tasks mapped to the developm
 - [x] **Task 1.6**: Audit test coverage on `core` engine to verify $\ge 95\%$ coverage and measure simulation runtime to ensure sub-2-second performance.
 
 ## Phase 2: Orchestration Layer & LLM Integration (TDD)
-- [ ] **Task 2.1**: Write failing unit tests in `tests/test_llm.py` for the deterministic scenario classifier.
+- [x] **Task 2.1**: Write failing unit tests in `tests/test_llm.py` for the deterministic scenario classifier.
 - [ ] **Task 2.2**: Implement `mest/llm/classifier.py` scenario classification rules.
 - [ ] **Task 2.3**: Write failing unit tests in `tests/test_llm.py` for the Ollama integration, verifying the reasoning loop (Decomposed routing, CoT parsing, Self-Reflection parsing) using complete API mocks.
 - [ ] **Task 2.4**: Implement `mest/llm/orchestrator.py` logic.
