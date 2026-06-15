@@ -37,7 +37,7 @@ def decompose_query(query: str, model: str = "llama3") -> list[str]:
     }
 
     try:
-        response = requests.post("http://localhost:11434/api/generate", json=payload, timeout=30)
+        response = requests.post("http://localhost:11434/api/generate", json=payload, timeout=180)
         response.raise_for_status()
         data = response.json()
         response_text = data.get("response", "")
@@ -175,7 +175,7 @@ def stream_cot_sr(prompt: str, stats: dict[str, Any], model: str = "llama3") -> 
     }
 
     try:
-        response = requests.post("http://localhost:11434/api/generate", json=payload, stream=True, timeout=30)
+        response = requests.post("http://localhost:11434/api/generate", json=payload, stream=True, timeout=180)
         response.raise_for_status()
     except Exception as e:
         # Graceful fallback: yield error message as response content
