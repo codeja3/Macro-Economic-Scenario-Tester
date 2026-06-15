@@ -9,7 +9,7 @@ Welcome to the **Macro-Economic Scenario Tester (MEST)** user manual. MEST is a 
 Before running the application, ensure you have the following installed on your machine:
 * **Python 3.12+**
 * **`uv` Package Manager:** Used to manage virtual environments and dependencies.
-* **Ollama (Optional but Recommended):** To use the **AI Scenario Analyst**, ensure you have a local Ollama server running with the `llama3` model. You can download Ollama from [ollama.com](https://ollama.com).
+* **Ollama (Optional but Recommended):** To use the **AI Scenario Analyst**, ensure you have a local Ollama server running with at least one model pulled (e.g., `llama3` or `gemma4:e2b`). You can download Ollama from [ollama.com](https://ollama.com). The application will dynamically detect and allow you to select any of your pulled models.
 
 ### Setup and Dependency Installation
 1. Open your terminal and navigate to the project directory:
@@ -82,6 +82,9 @@ Under the **Simulation Paths** tab, MEST plots 100 sample portfolio lifetimes:
 ## 5. Using the AI Scenario Analyst
 
 Navigate to the **AI Scenario Analyst** tab on the main page to interact with the local LLM reasoning model.
+
+> [!NOTE]
+> You can choose which model to use via the **AI Analyst Model** dropdown under **🛠️ Advanced Settings** in the sidebar. This list is populated dynamically from your locally running Ollama instance. If Ollama is offline, a warning will be displayed, and you can manually type a model name.
 
 ### 🚀 Running the Baseline Analysis
 1. Click the **"Run AI Scenario Analysis"** button.

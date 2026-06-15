@@ -8,6 +8,7 @@ Ollama LLM orchestration.
 
 from pathlib import Path
 from typing import Any
+import requests
 import altair as alt
 import pandas as pd
 import polars as pl
@@ -17,6 +18,17 @@ from mest.core.data_loader import load_historical_data, DataLoaderError
 from mest.core.simulator import SimulationConfig, run_simulation
 from mest.llm.classifier import classify_scenario
 from mest.llm.orchestrator import generate_analysis_stream
+
+def get_ollama_models() -> list[str]:
+    """Fetches available model names from the local Ollama instance."""
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if response.status_code == 200:
+            data = response.json()
+            return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        pass
+    return []
 
 # Configure page settings
 st.set_page_config(
@@ -290,6 +302,23 @@ with st.sidebar.expander("🛠️ Advanced Settings"):
         step=1,
         help="Seed for the random number generator. Lock this to compare scenarios deterministically.",
     )
+    
+    # Fetch available Ollama models dynamically
+    available_models = get_ollama_models()
+    if available_models:
+        selected_model = st.selectbox(
+            "AI Analyst Model",
+            options=available_models,
+            index=0,
+            help="Select the local Ollama model to use for narrative scenario and chat."
+        )
+    else:
+        selected_model = st.text_input(
+            "AI Analyst Model",
+            value="llama3",
+            help="Ollama connection failed or no models found. Manually enter model name."
+        )
+        st.warning("⚠️ No local Ollama models detected. Ensure Ollama is running.")
 
 
 # ==========================================
@@ -479,7 +508,7 @@ with tab2:
         )
         
         # Stream from orchestrator
-        for chunk in generate_analysis_stream(baseline_prompt, stats_payload):
+        for chunk in generate_analysis_stream(baseline_prompt, stats_payload, model=selected_model):
             if chunk["type"] == "thought":
                 thought_text += chunk["content"]
                 thought_placeholder.markdown(thought_text)
@@ -532,7 +561,7 @@ with tab2:
             r_text = ""
             ans_text = ""
             
-            for chunk in generate_analysis_stream(chat_prompt, stats_payload):
+            for chunk in generate_analysis_stream(chat_prompt, stats_payload, model=selected_model):
                 if chunk["type"] == "thought":
                     t_text += chunk["content"]
                     thought_p.markdown(t_text)
