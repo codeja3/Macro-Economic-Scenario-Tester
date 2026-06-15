@@ -1,10 +1,19 @@
 """Reactive frontend dashboard for the Macro-Economic Scenario Tester (MEST).
 
 This module implements the user interface using Streamlit, featuring sidebars
-for portfolio decumulation planning, parameter tooltips, and responsive layout.
+for portfolio decumulation planning, parameter tooltips, and responsive layout,
+integrated with the Polars simulation core and Altair visualizations.
 """
 
+from pathlib import Path
+import altair as alt
+import pandas as pd
+import polars as pl
 import streamlit as st
+
+from mest.core.data_loader import load_historical_data, DataLoaderError
+from mest.core.simulator import SimulationConfig, run_simulation
+from mest.llm.classifier import classify_scenario
 
 # Configure page settings
 st.set_page_config(
@@ -108,6 +117,31 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+# ==========================================
+# CACHED FUNCTIONS FOR PERFORMANCE
+# ==========================================
+@st.cache_data
+def cached_load_data(path: Path) -> pl.DataFrame:
+    """Loads historical macroeconomic data with caching."""
+    return load_historical_data(path)
+
+
+@st.cache_data
+def cached_run_simulation(config: SimulationConfig, _historical_df: pl.DataFrame | None = None) -> Any:
+    """Runs Monte Carlo decumulation simulation with caching on config hash."""
+    return run_simulation(config, _historical_df)
+
+
+# Ingest data
+csv_path = Path("data") / "historical_regimes.csv"
+try:
+    hist_df = cached_load_data(csv_path)
+except Exception as e:
+    st.error(f"Failed to load historical data: {e}")
+    st.stop()
+
 
 # ==========================================
 # SIDEBAR CONTROLS (Layout & Inputs)
@@ -256,60 +290,85 @@ with st.sidebar.expander("🛠️ Advanced Settings"):
 
 
 # ==========================================
-# MAIN INTERFACE LAYOUT
+# EXECUTE SIMULATION
 # ==========================================
+config = SimulationConfig(
+    starting_principal=float(starting_principal),
+    bridge_duration_months=bridge_duration_months,
+    bridge_monthly_withdrawal=float(bridge_monthly_withdrawal),
+    post_bridge_monthly_withdrawal=float(post_bridge_monthly_withdrawal),
+    simulation_duration_months=simulation_duration_months,
+    simulation_mode=simulation_mode,
+    mean_return_annual=mean_return_annual,
+    volatility_annual=volatility_annual,
+    inflation_annual=inflation_annual,
+    seed=seed,
+    num_paths=num_paths,
+)
 
-# 1. Summary Metrics Header
+with st.spinner("Calculating simulation paths..."):
+    results = cached_run_simulation(config, hist_df)
+
+
+# ==========================================
+# SUMMARY METRICS DISPLAY
+# ==========================================
 st.subheader("🏁 Stress Test Results")
 m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
 
-# Placeholders for statistics cards
+# Format outputs
+success_str = f"{results.success_probability * 100:.1f} %"
+median_str = f"${results.median_ending_balance:,.0f}"
+p10_str = f"${results.percentile_10th_ending_balance:,.0f}"
+p90_str = f"${results.percentile_90th_ending_balance:,.0f}"
+failure_month_str = f"Month {results.average_failure_month:.1f}" if results.average_failure_month > 0 else "N/A"
+
 with m_col1:
     st.markdown(
-        """
+        f"""
         <div class="metric-card">
             <p class="metric-title">Success Probability</p>
-            <p class="metric-value">-- %</p>
+            <p class="metric-value" style="color: {'#ef4444' if results.success_probability < 0.8 else '#22c55e'}">{success_str}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 with m_col2:
     st.markdown(
-        """
+        f"""
         <div class="metric-card">
             <p class="metric-title">Median End Balance</p>
-            <p class="metric-value">$ --</p>
+            <p class="metric-value">{median_str}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 with m_col3:
     st.markdown(
-        """
+        f"""
         <div class="metric-card">
             <p class="metric-title">Worst 10% Balance</p>
-            <p class="metric-value">$ --</p>
+            <p class="metric-value" style="color: #ef4444">{p10_str}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 with m_col4:
     st.markdown(
-        """
+        f"""
         <div class="metric-card">
             <p class="metric-title">Best 10% Balance</p>
-            <p class="metric-value">$ --</p>
+            <p class="metric-value">{p90_str}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 with m_col5:
     st.markdown(
-        """
+        f"""
         <div class="metric-card">
             <p class="metric-title">Avg Failure Month</p>
-            <p class="metric-value">--</p>
+            <p class="metric-value">{failure_month_str}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -317,14 +376,51 @@ with m_col5:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 2. Main Dashboard Visualization & Analysis Area
+
+# ==========================================
+# MAIN INTERFACE TABS
+# ==========================================
 tab1, tab2 = st.tabs(["📉 Simulation Paths", "🤖 AI Scenario Analyst"])
 
 with tab1:
-    st.subheader("Portfolio Value Over Time")
-    # Placeholder for chart
-    st.info("📊 Chart showing 100 sample simulation paths will be rendered here. Failed paths (balance hits $0) will be highlighted in red.")
+    st.subheader("Portfolio Value Over Time (100 Sample Paths)")
     
+    # 1. Transform monthly path dictionary to Pandas DataFrame
+    paths_df = pd.DataFrame(results.monthly_paths)
+    
+    # 2. Map path failure status (Failure if ending balance is $0)
+    # results.monthly_paths keys: 'month', 'path_0', 'path_1', etc.
+    num_paths_drawn = len(results.monthly_paths) - 1
+    path_statuses = {}
+    for i in range(num_paths_drawn):
+        path_key = f"path_{i}"
+        path_statuses[path_key] = "Failed" if results.monthly_paths[path_key][-1] == 0.0 else "Success"
+        
+    # 3. Melt to long format for Altair plotting
+    long_df = paths_df.melt(id_vars=["month"], var_name="path_id", value_name="balance")
+    long_df["status"] = long_df["path_id"].map(path_statuses)
+
+    # 4. Draw Altair chart
+    # Successful paths are steel-blue, failed paths are red
+    chart = (
+        alt.Chart(long_df)
+        .mark_line(opacity=0.45, strokeWidth=1.5)
+        .encode(
+            x=alt.X("month:Q", title="Month"),
+            y=alt.Y("balance:Q", title="Portfolio Balance ($)"),
+            detail="path_id:N",
+            color=alt.Color(
+                "status:N",
+                scale=alt.Scale(domain=["Success", "Failed"], range=["#3b82f6", "#ef4444"]),
+                legend=alt.Legend(title="Path Status"),
+            ),
+        )
+        .properties(width="100%", height=450)
+        .interactive()
+    )
+    
+    st.altair_chart(chart, use_container_width=True)
+
     with st.expander("💡 Understanding the Math"):
         st.markdown(
             """
@@ -338,6 +434,11 @@ with tab1:
 
 with tab2:
     st.subheader("Local LLM Scenario Narrative")
+    
+    # Classify the scenario deterministically to display in UI
+    regime = classify_scenario(mean_return_annual, volatility_annual, inflation_annual)
+    st.info(f"📋 **Deterministic Regime Classification:** {regime}")
+    
     # Placeholder for LLM Analysis
     st.warning("🤖 AI Analysis is loading... The local Ollama LLM will synthesize findings using Chain-of-Thought (CoT) and Self-Reflection (SR).")
     
