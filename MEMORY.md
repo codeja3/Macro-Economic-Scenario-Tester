@@ -22,3 +22,5 @@ The **Macro-Economic Scenario Tester (MEST)** is a reactive, local-first financi
   - **Cognitive Loop Specification:** Standardized the Ollama reasoning engine to use a Decomposed query parse step for inputs > 50 tokens, followed by Chain of Thought and Self-Reflection stages.
   - **Caching Mechanism**: Structured Streamlit's cache around a hashed `SimulationConfig` to meet the < 2 seconds latency constraint.
   - **Spec & Task Drafting:** Completed drafting [SPEC.md](file:///Users/yiannis/Projects/myFinances/mest/SPEC.md) and [TODO.md](file:///Users/yiannis/Projects/myFinances/mest/TODO.md), locking in system contracts and a 4-phase execution checklist to begin test-driven development.
+  - **Git Branching Strategy:** Adopted a feature-branch workflow where each task in [TODO.md](file:///Users/yiannis/Projects/myFinances/mest/TODO.md) is executed on a dedicated task branch, then committed and merged back to `master` to preserve a clean history.
+
