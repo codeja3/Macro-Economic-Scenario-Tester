@@ -1,7 +1,6 @@
 # TODO: MEST Execution Tasks
 
-This document lists the step-by-step implementation tasks mapped to the development phases in [SPEC.md](file:///Users/yiannis/Projects/myFinances/mest/SPEC.md).
-
+This document lists the step-by-step implementation tasks mapped to the development phases in [SPEC.md]
 ---
 
 ## Phase 1: Data Engine & Simulation Core (TDD)
@@ -16,7 +15,7 @@ This document lists the step-by-step implementation tasks mapped to the developm
 - [x] **Task 2.1**: Write failing unit tests in `tests/test_llm.py` for the deterministic scenario classifier.
 - [x] **Task 2.2**: Implement `mest/llm/classifier.py` scenario classification rules.
 - [x] **Task 2.3**: Write failing unit tests in `tests/test_llm.py` for the Ollama integration, verifying the reasoning loop (Decomposed routing, CoT parsing, Self-Reflection parsing) using complete API mocks.
-- [ ] **Task 2.4**: Implement `mest/llm/orchestrator.py` logic.
+- [x] **Task 2.4**: Implement `mest/llm/orchestrator.py` logic.
 
 ## Phase 3: Streamlit Interface & Visualizations
 - [ ] **Task 3.1**: Create Streamlit layout in `mest/ui/dashboard.py` (including sidebar parameters and tooltips).
@@ -26,4 +25,4 @@ This document lists the step-by-step implementation tasks mapped to the developm
 ## Phase 4: Integration, Verification & Optimization
 - [ ] **Task 4.1**: Execute integration tests and perform manual UI verification.
 - [ ] **Task 4.2**: Verify that Ollama calls are fully blocked/mocked in tests.
-- [ ] **Task 4.3**: Perform final documentation updates in [MEMORY.md](file:///Users/yiannis/Projects/myFinances/mest/MEMORY.md).
+- [ ] **Task 4.3**: Perform final documentation updates in [MEMORY.md].
