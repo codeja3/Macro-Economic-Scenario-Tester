@@ -1,0 +1,22 @@
+[project]
+name = "mest"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "codeja3", email = "ja3@gmx.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "loguru>=0.7.3",
+    "pandas>=3.0.3",
+    "polars>=1.41.2",
+    "pytest>=9.1.0",
+    "requests>=2.34.2",
+    "streamlit>=1.58.0",
+    "xlrd>=2.0.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.21,<0.12.0"]
+build-backend = "uv_build"

@@ -6,7 +6,7 @@ This document lists the step-by-step implementation tasks mapped to the developm
 
 ## Phase 1: Data Engine & Simulation Core (TDD)
 - [x] **Task 1.1**: Prepare local historical data file: `data/historical_regimes.csv` containing date, S&P 500 total return, CPI index, and 10-Yr Treasury yield.
-- [ ] **Task 1.2**: Write failing unit tests in `tests/test_core.py` for data ingestion and loader logic.
+- [x] **Task 1.2**: Write failing unit tests in `tests/test_core.py` for data ingestion and loader logic.
 - [ ] **Task 1.3**: Implement `mest/core/data_loader.py` to pass tests.
 - [ ] **Task 1.4**: Write failing unit tests in `tests/test_core.py` for the Monte Carlo simulation core (verifying path generation, success probability logic, and edge cases like zero withdrawals or total depletion).
 - [ ] **Task 1.5**: Implement vectorized Polars simulation core in `mest/core/simulator.py`.
