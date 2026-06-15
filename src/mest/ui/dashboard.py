@@ -2,7 +2,8 @@
 
 This module implements the user interface using Streamlit, featuring sidebars
 for portfolio decumulation planning, parameter tooltips, and responsive layout,
-integrated with the Polars simulation core and Altair visualizations.
+integrated with the Polars simulation core, Altair visualizations, and local
+Ollama LLM orchestration.
 """
 
 from pathlib import Path
@@ -14,6 +15,7 @@ import streamlit as st
 from mest.core.data_loader import load_historical_data, DataLoaderError
 from mest.core.simulator import SimulationConfig, run_simulation
 from mest.llm.classifier import classify_scenario
+from mest.llm.orchestrator import generate_analysis_stream
 
 # Configure page settings
 st.set_page_config(
@@ -382,6 +384,23 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ==========================================
 tab1, tab2 = st.tabs(["📉 Simulation Paths", "🤖 AI Scenario Analyst"])
 
+# Setup payload for LLM Context
+regime = classify_scenario(mean_return_annual, volatility_annual, inflation_annual)
+stats_payload = {
+    "starting_principal": starting_principal,
+    "bridge_duration_months": bridge_duration_months,
+    "bridge_monthly_withdrawal": bridge_monthly_withdrawal,
+    "post_bridge_monthly_withdrawal": post_bridge_monthly_withdrawal,
+    "simulation_duration_months": simulation_duration_months,
+    "simulation_mode": simulation_mode,
+    "success_probability": results.success_probability,
+    "median_ending_balance": results.median_ending_balance,
+    "percentile_10th_ending_balance": results.percentile_10th_ending_balance,
+    "percentile_90th_ending_balance": results.percentile_90th_ending_balance,
+    "average_failure_month": results.average_failure_month,
+    "regime_classification": regime,
+}
+
 with tab1:
     st.subheader("Portfolio Value Over Time (100 Sample Paths)")
     
@@ -389,7 +408,6 @@ with tab1:
     paths_df = pd.DataFrame(results.monthly_paths)
     
     # 2. Map path failure status (Failure if ending balance is $0)
-    # results.monthly_paths keys: 'month', 'path_0', 'path_1', etc.
     num_paths_drawn = len(results.monthly_paths) - 1
     path_statuses = {}
     for i in range(num_paths_drawn):
@@ -401,7 +419,6 @@ with tab1:
     long_df["status"] = long_df["path_id"].map(path_statuses)
 
     # 4. Draw Altair chart
-    # Successful paths are steel-blue, failed paths are red
     chart = (
         alt.Chart(long_df)
         .mark_line(opacity=0.45, strokeWidth=1.5)
@@ -434,15 +451,103 @@ with tab1:
 
 with tab2:
     st.subheader("Local LLM Scenario Narrative")
-    
-    # Classify the scenario deterministically to display in UI
-    regime = classify_scenario(mean_return_annual, volatility_annual, inflation_annual)
     st.info(f"📋 **Deterministic Regime Classification:** {regime}")
     
-    # Placeholder for LLM Analysis
-    st.warning("🤖 AI Analysis is loading... The local Ollama LLM will synthesize findings using Chain-of-Thought (CoT) and Self-Reflection (SR).")
-    
-    # Placeholder for LLM Chat Window
+    # Run Baseline Analysis Button
+    if st.button("🚀 Run AI Scenario Analysis", key="run_analysis"):
+        st.markdown("### Baseline Narrative Analysis")
+        
+        # Set up placeholders for async streaming display
+        thought_expander = st.expander("💭 Chain of Thought (CoT)", expanded=False)
+        reflection_expander = st.expander("🤔 Self-Reflection (SR)", expanded=False)
+        response_container = st.container()
+        
+        thought_placeholder = thought_expander.empty()
+        reflection_placeholder = reflection_expander.empty()
+        response_placeholder = response_container.empty()
+        
+        thought_text = ""
+        reflection_text = ""
+        response_text = ""
+        
+        # Define baseline analysis prompt
+        baseline_prompt = (
+            "Explain what the chosen simulation scenario entails in plain English. "
+            "Then, provide a qualitative explanation of the statistical realities calculated by the Polars engine "
+            "(the worst, best, and most probable scenarios) and evaluate the vulnerability of the decumulation bridge."
+        )
+        
+        # Stream from orchestrator
+        for chunk in generate_analysis_stream(baseline_prompt, stats_payload):
+            if chunk["type"] == "thought":
+                thought_text += chunk["content"]
+                thought_placeholder.markdown(thought_text)
+            elif chunk["type"] == "reflection":
+                reflection_text += chunk["content"]
+                reflection_placeholder.markdown(reflection_text)
+            elif chunk["type"] == "response":
+                response_text += chunk["content"]
+                response_placeholder.markdown(response_text)
+            elif chunk["type"] == "sub_question":
+                st.markdown(f"**❓ Sub-Question:** {chunk['content']}")
+                
     st.markdown("---")
-    st.subheader("💬 Ask LLM Analyst")
-    st.chat_input("Ask a question about this scenario (e.g. 'What makes this portfolio fail?')")
+    st.subheader("💬 Chat with LLM Analyst")
+    
+    # Initialize chat history in RAM session_state
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+        
+    # Display chat messages from history on app rerun
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            if "thought" in message and message["thought"]:
+                with st.expander("💭 Thought process"):
+                    st.markdown(message["thought"])
+            if "reflection" in message and message["reflection"]:
+                with st.expander("🤔 Self-reflection"):
+                    st.markdown(message["reflection"])
+
+    # React to user input
+    if chat_prompt := st.chat_input("Ask a question about this scenario..."):
+        # Display user message in chat message container
+        with st.chat_message("user"):
+            st.markdown(chat_prompt)
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": chat_prompt})
+        
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            thought_exp = st.expander("💭 Chain of Thought (CoT)", expanded=False)
+            reflection_exp = st.expander("🤔 Self-Reflection (SR)", expanded=False)
+            resp_cont = st.container()
+            
+            thought_p = thought_exp.empty()
+            reflection_p = reflection_exp.empty()
+            resp_p = resp_cont.empty()
+            
+            t_text = ""
+            r_text = ""
+            ans_text = ""
+            
+            for chunk in generate_analysis_stream(chat_prompt, stats_payload):
+                if chunk["type"] == "thought":
+                    t_text += chunk["content"]
+                    thought_p.markdown(t_text)
+                elif chunk["type"] == "reflection":
+                    r_text += chunk["content"]
+                    reflection_p.markdown(r_text)
+                elif chunk["type"] == "response":
+                    ans_text += chunk["content"]
+                    resp_p.markdown(ans_text)
+                elif chunk["type"] == "sub_question":
+                    st.markdown(f"**❓ Sub-Question:** {chunk['content']}")
+                    
+            # Add assistant response to chat history
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": ans_text,
+                "thought": t_text,
+                "reflection": r_text,
+            })
