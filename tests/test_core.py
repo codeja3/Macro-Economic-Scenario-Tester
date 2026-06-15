@@ -150,7 +150,7 @@ def test_simulation_historical_bootstrap() -> None:
         bridge_duration_months=3,
         bridge_monthly_withdrawal=1000.0,
         post_bridge_monthly_withdrawal=1000.0,
-        simulation_duration_months=12,
+        simulation_duration_months=60,
         simulation_mode="historical_bootstrap",
         mean_return_annual=0.0,
         volatility_annual=0.0,
