@@ -1,7 +1,32 @@
-"""Configuration and fixtures for pytest."""
+"""Configuration and fixtures for pytest.
+
+Includes mock CSV content fixtures and a global socket-blocking fixture to ensure
+no real external or local network requests are made during test execution.
+"""
 
 from pathlib import Path
+import socket
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def block_external_sockets() -> None:
+    """Disable all network socket connects during test runs.
+
+    This ensures that the test suite is 100% offline and that no accidental
+    network requests are made to the local Ollama API or external services.
+    """
+    original_socket = socket.socket
+
+    def socket_disabled(*args, **kwargs):
+        raise RuntimeError(
+            "Real network and socket connections are blocked in this test suite. "
+            "Ensure all LLM or API requests are properly mocked."
+        )
+
+    socket.socket = socket_disabled
+    yield
+    socket.socket = original_socket
 
 
 @pytest.fixture
